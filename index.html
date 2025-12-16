@@ -44,7 +44,7 @@
                         <i data-lucide="calendar" class="w-6 h-6 text-indigo-600"></i>
                         2026 Habit Tracker
                     </h1>
-                    <p class="text-sm text-slate-500 mt-1">Jan 19, 2026 — Jul 18, 2026</p>
+                    <p class="text-sm text-slate-500 mt-1">Jan 1, 2026 — Dec 31, 2026</p>
                 </div>
 
                 <!-- Controls -->
@@ -135,8 +135,8 @@
     <!-- JAVASCRIPT LOGIC -->
     <script>
         // --- CONSTANTS & CONFIG ---
-        const START_DATE = new Date('2026-01-19T00:00:00');
-        const END_DATE = new Date('2026-07-18T00:00:00');
+        const START_DATE = new Date('2026-01-01T00:00:00');
+        const END_DATE = new Date('2026-12-31T00:00:00');
         const CHART_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#06b6d4', '#f43f5e', '#84cc16'];
 
         // --- STATE MANAGEMENT ---
@@ -642,8 +642,7 @@
                 return { ...h, color, share };
             });
             const pieGradient = stats.totalCompleted === 0 ? 'conic-gradient(#f1f5f9 0% 100%)' : `conic-gradient(${pieSegments.map(s => `${s.color} 0 ${s.share}%`).join(', ')})`;
-            // Note: Simple CSS conic gradients don't support start/end stops nicely in one string list without calc, 
-            // easier approach: use simple stops.
+            
             const pieStyle = stats.totalCompleted === 0 
                 ? 'background: #f1f5f9' 
                 : `background: conic-gradient(${pieSegments.map((s,i,arr) => {
@@ -673,6 +672,55 @@
                 }).join(' ');
                 return close ? `${points} ${width},${height} 0,${height}` : points;
             };
+
+            // --- MONTHLY PROGRESS DATA ---
+            const monthlyData = state.months.map(m => {
+                let possible = state.habits.length * m.days.length;
+                let completed = 0;
+                m.days.forEach(d => {
+                    const key = formatDateKey(d);
+                    const rec = state.records[key] || {};
+                    state.habits.forEach(h => { if(rec[h.id]) completed++; });
+                });
+                return { 
+                    label: m.name.substring(0, 3), 
+                    fullLabel: m.name,
+                    percent: possible === 0 ? 0 : Math.round((completed / possible) * 100) 
+                };
+            });
+
+            // --- MONTHLY CHART SVG GENERATION ---
+            const monthBarWidth = 40;
+            const monthGap = 20;
+            const monthChartHeight = 160;
+            const totalChartWidth = (monthlyData.length * monthBarWidth) + ((monthlyData.length - 1) * monthGap);
+            const svgWidth = Math.max(600, totalChartWidth + 100);
+            const startX = (svgWidth - totalChartWidth) / 2;
+
+            const monthlyChartSvg = `
+                <svg viewBox="0 0 ${svgWidth} ${monthChartHeight + 40}" class="w-full h-full overflow-visible">
+                    ${monthlyData.map((d, i) => {
+                        const x = startX + i * (monthBarWidth + monthGap);
+                        const barHeight = (d.percent / 100) * monthChartHeight;
+                        const y = monthChartHeight - barHeight;
+                        const colorClass = d.percent >= 80 ? '#10b981' : d.percent >= 50 ? '#6366f1' : '#94a3b8'; // Emerald, Indigo, Slate
+                        
+                        return `
+                            <g class="group">
+                                <title>${d.fullLabel}: ${d.percent}%</title>
+                                <!-- Background Bar -->
+                                <rect x="${x}" y="0" width="${monthBarWidth}" height="${monthChartHeight}" rx="4" fill="#f1f5f9" />
+                                <!-- Fill Bar -->
+                                <rect x="${x}" y="${y}" width="${monthBarWidth}" height="${barHeight}" rx="4" fill="${colorClass}" class="transition-all duration-500 group-hover:opacity-80" />
+                                <!-- Label -->
+                                <text x="${x + monthBarWidth/2}" y="${monthChartHeight + 20}" text-anchor="middle" class="text-xs fill-slate-400 font-medium" style="font-family: inherit;">${d.label}</text>
+                                <!-- Tooltip value -->
+                                <text x="${x + monthBarWidth/2}" y="${y - 8}" text-anchor="middle" class="text-xs font-bold fill-slate-600 opacity-0 group-hover:opacity-100 transition-opacity" style="font-family: inherit;">${d.percent}%</text>
+                            </g>
+                        `;
+                    }).join('')}
+                </svg>
+            `;
 
             // --- RENDER HTML ---
             const badgesHtml = achievements.map(a => `
@@ -789,7 +837,7 @@
                         <section class="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
                             <div class="flex items-center gap-3 mb-6">
                                 <div class="p-2 bg-blue-100 rounded-lg text-blue-600"><i data-lucide="line-chart" class="w-6 h-6"></i></div>
-                                <div><h2 class="text-xl font-bold text-slate-900">Trend</h2><p class="text-sm text-slate-500">Weekly consistency</p></div>
+                                <div><h2 class="text-xl font-bold text-slate-900">Weekly Trend</h2><p class="text-sm text-slate-500">Weekly consistency</p></div>
                             </div>
                             <div class="h-64 w-full bg-slate-50/50 rounded-xl border border-slate-100 relative p-4 overflow-hidden">
                                 ${trendData.length > 1 ? `
@@ -809,6 +857,17 @@
                                     }).join('')}
                                 </svg>
                                 ` : '<div class="absolute inset-0 flex items-center justify-center text-slate-400 italic">Need more data</div>'}
+                            </div>
+                        </section>
+
+                        <!-- Monthly Progress Bar Chart -->
+                        <section class="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
+                            <div class="flex items-center gap-3 mb-6">
+                                <div class="p-2 bg-violet-100 rounded-lg text-violet-600"><i data-lucide="bar-chart-2" class="w-6 h-6"></i></div>
+                                <div><h2 class="text-xl font-bold text-slate-900">Monthly Performance</h2><p class="text-sm text-slate-500">Aggregate completion by month</p></div>
+                            </div>
+                            <div class="h-64 w-full flex items-center justify-center">
+                                ${monthlyChartSvg}
                             </div>
                         </section>
 
